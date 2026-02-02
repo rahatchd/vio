@@ -1,6 +1,7 @@
 # vio
 
-VIO - VI wOrsened: Modal text editor with a subset of the features of vi
+VIO - VI wOrsened:
+a modal text editor with a subset of the features of VI
 
 ## requirements
 
@@ -19,3 +20,17 @@ make
 ```sh
 ./vio <filename>
 ```
+
+## features
+
+- [x] load file
+- [x] render file
+- [x] hjkl motions
+- [x] remember column position
+- [x] status bar
+- [ ] scrolling
+- [ ] insert mode
+- [ ] save file
+- [ ] word vim motions
+- [ ] number modifiers
+- [ ] show line numbers
