@@ -73,7 +73,7 @@ void buffer_free(buffer_t *buf) {
 int buffer_append_line(buffer_t *buf, line_t *line) {
   if (buf->size >= buf->cap) {
     size_t cap = buf->cap ? 2 * buf->cap : 2;
-    line_t **lines = reallocarray(buf->lines, cap, sizeof(line_t *));
+    line_t **lines = realloc(buf->lines, cap * sizeof(line_t *));
     if (lines == NULL) {
       return -1;
     }
