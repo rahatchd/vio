@@ -156,11 +156,27 @@ typedef struct {
   int prefx;
 } tui_state_t;
 
+int num_digits(int n) {
+  int d = 0;
+  do {
+    n /= 10;
+    d++;
+  } while (n);
+  return d;
+}
+
 void paint_status_bar(tui_state_t ts) {
   move(ts.maxy - 1, 0);
   attron(COLOR_PAIR(2));
-  printw("--NORMAL--");
-  for (int i = 10; i < ts.maxx; i++) {
+  printw("-- NORMAL --");
+  const int digits = num_digits(ts.cx) + num_digits(ts.cy);
+  const int left_offset = 12;
+  const int right_offset = 6;
+  for (int i = left_offset; i < ts.maxx - digits - right_offset; i++) {
+    printw(" ");
+  }
+  printw("(%d %d)", ts.cy, ts.cx);
+  for (int i = ts.maxx; i > ts.maxx - digits - right_offset; i--) {
     printw(" ");
   }
   attroff(COLOR_PAIR(2));
@@ -177,7 +193,7 @@ void tui(buffer_t *buf, FILE *file) {
   noecho();
   clear();
   refresh();
-  tui_state_t ts;
+  tui_state_t ts = {0};
   getmaxyx(stdscr, ts.maxy, ts.maxx);
   int max_rows = buf->size > ts.maxy - 2 ? ts.maxy - 2 : buf->size;
   for (int i = 0; i < max_rows; i++) {
@@ -216,6 +232,8 @@ void tui(buffer_t *buf, FILE *file) {
     ts.cx = clamp(0, buf->lines[ts.cy]->len ? buf->lines[ts.cy]->len - 1 : 0,
                   ts.prefx);
     move(ts.cy, ts.cx);
+    paint_status_bar(ts);
+    refresh();
   } while (key != 'q');
   endwin();
 }
