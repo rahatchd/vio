@@ -35,6 +35,49 @@ void line_free(line_t *line) {
   free(line);
 }
 
+void line_insert_brute_force(line_t *line, int pos, char c) {
+  if (pos < 0 || pos > (int)line->len) {
+    return;
+  }
+  if (line->len + 1 >= line->cap) {
+    size_t newcap = 2 * line->cap;
+    char *d = realloc(line->data, newcap * sizeof(char));
+    if (d == NULL) {
+      return;
+    }
+    line->data = d;
+    line->cap = newcap;
+  }
+  line->len++;
+  char swap = c;
+  for (int i = pos; i < line->len; i++) {
+    char tmp = line->data[i];
+    line->data[i] = swap;
+    swap = tmp;
+  }
+  line->data[line->len] = '\0';
+}
+
+void line_remove_char_at(line_t *line, int pos) {
+  if (pos < 0 || pos > (int)line->len) {
+    return;
+  }
+  if (line->len + 1 <= line->cap / 2) {
+    size_t newcap = line->cap / 2;
+    char *d = realloc(line->data, newcap * sizeof(char));
+    if (d == NULL) {
+      return;
+    }
+    line->data = d;
+    line->cap = newcap;
+  }
+  line->len--;
+  for (int i = pos + 1; i < line->len; i++) {
+    line->data[i - 1] = line->data[i];
+  }
+  line->data[line->len] = '\0';
+}
+
 typedef struct {
   line_t **lines;
   size_t size;
@@ -121,7 +164,7 @@ void close_file(FILE *file) {
 }
 
 void log_buffer(buffer_t *buf, FILE *file) {
-  printf("buffer loaded:\n");
+  printf("buffer:\n");
   printf("===\n");
   for (int i = 0; i < buf->size; i++) {
     printf("%s", buf->lines[i]->data);
@@ -130,7 +173,7 @@ void log_buffer(buffer_t *buf, FILE *file) {
 
   size_t total_cap = 0;
   for (int i = 0; i < buf->size; i++) {
-    total_cap += buf->lines[i]->cap;
+    total_cap += buf->lines[i]->len;
   }
   printf("estimated resources used: %zu bytes\n", total_cap);
   fseek(file, 0L, SEEK_END);
@@ -147,6 +190,11 @@ int clamp(int min, int max, int val) {
   return val;
 }
 
+enum mode_t {
+  MODE_INSERT,
+  MODE_NORMAL,
+};
+
 typedef struct {
   int cx;
   int cy;
@@ -154,6 +202,8 @@ typedef struct {
   int maxy;
   int topoff;
   int prefx;
+  mode_t mode;
+  buffer_t *buf;
 } tui_state_t;
 
 int num_digits(int n) {
@@ -165,22 +215,110 @@ int num_digits(int n) {
   return d;
 }
 
-void paint_status_bar(tui_state_t ts) {
-  move(ts.maxy - 1, 0);
+void render_status_bar(tui_state_t *ts) {
+  move(ts->maxy - 1, 0);
   attron(COLOR_PAIR(2));
-  printw("-- NORMAL --");
-  const int digits = num_digits(ts.cx) + num_digits(ts.cy);
+  switch (ts->mode) {
+  case MODE_INSERT:
+    printw("-- INSERT --");
+    break;
+  case MODE_NORMAL:
+    printw("-- NORMAL --");
+    break;
+  }
+  const int digits = num_digits(ts->cx) + num_digits(ts->cy);
   const int left_offset = 12;
   const int right_offset = 6;
-  for (int i = left_offset; i < ts.maxx - digits - right_offset; i++) {
+  for (int i = left_offset; i < ts->maxx - digits - right_offset; i++) {
     printw(" ");
   }
-  printw("(%d %d)", ts.cy, ts.cx);
-  for (int i = ts.maxx; i > ts.maxx - digits - right_offset; i--) {
+  printw("(%d %d)", ts->cy, ts->cx);
+  for (int i = ts->maxx; i > ts->maxx - digits - right_offset; i--) {
     printw(" ");
   }
   attroff(COLOR_PAIR(2));
-  move(ts.cy, ts.cx);
+  move(ts->cy, ts->cx);
+}
+
+void normal(tui_state_t *ts, int key) {
+  switch (key) {
+  case 'k':
+  case KEY_UP:
+    ts->cy--;
+    break;
+  case 'j':
+  case KEY_DOWN:
+    ts->cy++;
+    break;
+  case 'h':
+  case KEY_LEFT:
+    ts->prefx--;
+    if (ts->prefx < 0)
+      ts->prefx = 0;
+    break;
+  case 'l':
+  case KEY_RIGHT:
+    ts->prefx++;
+    if (ts->prefx >= ts->buf->lines[ts->cy]->len)
+      ts->prefx = ts->buf->lines[ts->cy]->len - 1;
+    break;
+  case 'i':
+    ts->mode = MODE_INSERT;
+    break;
+  default:
+    break;
+  }
+  ts->cy = clamp(0, ts->buf->size ? ts->buf->size - 1 : 0, ts->cy);
+  ts->cx = clamp(
+      0, ts->buf->lines[ts->cy]->len ? ts->buf->lines[ts->cy]->len - 1 : 0,
+      ts->prefx);
+  move(ts->cy, ts->cx);
+}
+
+void render_buffer(tui_state_t *ts) {
+  clear();
+  int max_rows = ts->buf->size > ts->maxy - 2 ? ts->maxy - 2 : ts->buf->size;
+  for (int i = 0; i < max_rows; i++) {
+    printw("%s", ts->buf->lines[i]->data);
+  }
+  refresh();
+}
+
+void render_line(tui_state_t *ts) {
+  move(ts->cy, 0);
+  clrtoeol();
+  printw("%s", ts->buf->lines[ts->cy]->data);
+  move(ts->cy, ts->cx);
+  refresh();
+}
+
+void insert(tui_state_t *ts, int key) {
+  switch (key) {
+  case 27: // ESC
+    nodelay(stdscr, TRUE);
+    key = getch();
+    if (key == ERR) {
+      ts->mode = MODE_NORMAL;
+    } else {
+      ungetch(key);
+    }
+    nodelay(stdscr, FALSE);
+    break;
+  case KEY_BACKSPACE:
+    line_remove_char_at(ts->buf->lines[ts->cy], ts->cx - 1);
+    if (ts->cx > 0) {
+      ts->cx--;
+    }
+    render_line(ts);
+    break;
+  default:
+    if (0 < key && key < 255) { // ascii
+      line_insert_brute_force(ts->buf->lines[ts->cy], ts->cx, key);
+      ts->cx++;
+      render_line(ts);
+    }
+    break;
+  }
 }
 
 void tui(buffer_t *buf, FILE *file) {
@@ -189,52 +327,32 @@ void tui(buffer_t *buf, FILE *file) {
   init_pair(1, COLOR_WHITE, COLOR_BLACK);
   init_pair(2, COLOR_BLACK, COLOR_WHITE);
   keypad(stdscr, TRUE);
+  set_escdelay(0);
   cbreak();
   noecho();
   clear();
   refresh();
   tui_state_t ts = {0};
+  ts.mode = MODE_NORMAL;
+  ts.buf = buf;
   getmaxyx(stdscr, ts.maxy, ts.maxx);
-  int max_rows = buf->size > ts.maxy - 2 ? ts.maxy - 2 : buf->size;
-  for (int i = 0; i < max_rows; i++) {
-    printw("%s", buf->lines[i]->data);
-  }
-  paint_status_bar(ts);
+  render_buffer(&ts);
+  render_status_bar(&ts);
   int key;
   do {
     noecho();
     key = getch();
-    switch (key) {
-    case 'k':
-    case KEY_UP:
-      ts.cy--;
+    switch (ts.mode) {
+    case MODE_NORMAL:
+      normal(&ts, key);
       break;
-    case 'j':
-    case KEY_DOWN:
-      ts.cy++;
-      break;
-    case 'h':
-    case KEY_LEFT:
-      ts.prefx--;
-      if (ts.prefx < 0)
-        ts.prefx = 0;
-      break;
-    case 'l':
-    case KEY_RIGHT:
-      ts.prefx++;
-      if (ts.prefx >= buf->lines[ts.cy]->len)
-        ts.prefx = buf->lines[ts.cy]->len - 1;
-      break;
-    default:
+    case MODE_INSERT:
+      insert(&ts, key);
       break;
     }
-    ts.cy = clamp(0, buf->size ? buf->size - 1 : 0, ts.cy);
-    ts.cx = clamp(0, buf->lines[ts.cy]->len ? buf->lines[ts.cy]->len - 1 : 0,
-                  ts.prefx);
-    move(ts.cy, ts.cx);
-    paint_status_bar(ts);
+    render_status_bar(&ts);
     refresh();
-  } while (key != 'q');
+  } while (!(ts.mode == MODE_NORMAL && key == 'q'));
   endwin();
 }
 
@@ -257,7 +375,13 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  printf("before tui\n");
+  log_buffer(buf, file);
+
   tui(buf, file);
+
+  printf("after tui\n");
+  log_buffer(buf, file);
 
   buffer_free(buf);
   close_file(file);
