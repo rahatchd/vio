@@ -13,14 +13,22 @@ typedef struct {
   size_t cap;
 } line_t;
 
-line_t *line_new(void) {
+line_t *line_new(size_t cap) {
   line_t *line = malloc(sizeof(line_t));
   if (line == NULL) {
     return NULL;
   }
-  line->data = NULL;
+  if (cap == 0) {
+    line->data = NULL;
+  } else {
+    line->data = calloc(cap * sizeof(char), '\0');
+    if (line->data == NULL) {
+      free(line);
+      return NULL;
+    }
+  }
   line->len = 0;
-  line->cap = 0;
+  line->cap = cap;
   return line;
 }
 
@@ -71,11 +79,31 @@ void line_remove_char_at(line_t *line, int pos) {
     line->data = d;
     line->cap = newcap;
   }
-  line->len--;
   for (int i = pos + 1; i < line->len; i++) {
     line->data[i - 1] = line->data[i];
   }
-  line->data[line->len] = '\0';
+  line->data[--line->len] = '\0';
+}
+
+line_t *line_split(line_t *line, int pos) {
+  if (pos < 0) {
+    pos = 0;
+  }
+  if (pos > line->len - 1) {
+    pos = line->len - 1;
+  }
+  size_t n = strlen(&line->data[pos]);
+  line_t *lnew = line_new(n);
+  if (lnew == NULL) {
+    return NULL;
+  }
+  for (int i = 0; i < n; i++) {
+    lnew->data[i] = line->data[pos + i];
+    line->data[pos + i] = '\0';
+  }
+  line->data[pos] = '\n';
+  line->len = pos;
+  return lnew;
 }
 
 typedef struct {
@@ -132,7 +160,7 @@ buffer_t *buffer_from_file(FILE *file) {
   if (buf == NULL) {
     return NULL;
   }
-  line_t *line = line_new();
+  line_t *line = line_new(0);
   if (line == NULL) {
     buffer_free(buf);
     return NULL;
@@ -145,7 +173,7 @@ buffer_t *buffer_from_file(FILE *file) {
       buffer_free(buf);
       return NULL;
     }
-    line = line_new();
+    line = line_new(0);
     if (line == NULL) {
       buffer_free(buf);
       return NULL;
@@ -153,6 +181,28 @@ buffer_t *buffer_from_file(FILE *file) {
   }
   line_free(line);
   return buf;
+}
+
+void buffer_insert_line(buffer_t *buf, line_t *line, int n) {
+  if (n < 0 || n > buf->size || buf == NULL || line == NULL) {
+    return;
+  }
+  if (buf->size + 1 >= buf->cap) {
+    size_t cap = buf->cap ? 2 * buf->cap : 2;
+    line_t **lines = realloc(buf->lines, cap * sizeof(line_t *));
+    if (lines == NULL) {
+      return;
+    }
+    buf->cap = cap;
+    buf->lines = lines;
+  }
+  line_t *swap = line;
+  for (int i = n; i < buf->size + 1; i++) {
+    line_t *tmp = buf->lines[i];
+    buf->lines[i] = swap;
+    swap = tmp;
+  }
+  buf->size++;
 }
 
 void close_file(FILE *file) {
@@ -232,7 +282,7 @@ void render_status_bar(tui_state_t *ts) {
   for (int i = left_offset; i < ts->maxx - digits - right_offset; i++) {
     printw(" ");
   }
-  printw("(%d %d)", ts->cy, ts->cx);
+  printw("%d, %d", ts->cy, ts->cx);
   for (int i = ts->maxx; i > ts->maxx - digits - right_offset; i--) {
     printw(" ");
   }
@@ -276,11 +326,12 @@ void normal(tui_state_t *ts, int key) {
 }
 
 void render_buffer(tui_state_t *ts) {
-  clear();
   int max_rows = ts->buf->size > ts->maxy - 2 ? ts->maxy - 2 : ts->buf->size;
+  move(0, 0);
   for (int i = 0; i < max_rows; i++) {
     printw("%s", ts->buf->lines[i]->data);
   }
+  move(ts->cy, ts->cx);
   refresh();
 }
 
@@ -296,6 +347,7 @@ void insert(tui_state_t *ts, int key) {
   switch (key) {
   case 27: // ESC
     nodelay(stdscr, TRUE);
+    noecho();
     key = getch();
     if (key == ERR) {
       ts->mode = MODE_NORMAL;
@@ -305,16 +357,31 @@ void insert(tui_state_t *ts, int key) {
     nodelay(stdscr, FALSE);
     break;
   case KEY_BACKSPACE:
+  case KEY_DC:
+  case 127:
     line_remove_char_at(ts->buf->lines[ts->cy], ts->cx - 1);
     if (ts->cx > 0) {
       ts->cx--;
+      ts->prefx = ts->cx;
     }
-    render_line(ts);
+    render_buffer(ts);
     break;
+  case '\n':
+  case KEY_ENTER: {
+    line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx);
+    buffer_insert_line(ts->buf, lnew, ts->cy);
+    render_buffer(ts);
+    ts->cy++;
+    ts->cx = 0;
+    render_status_bar(ts);
+    move(ts->cy, ts->cx);
+    break;
+  }
   default:
     if (0 < key && key < 255) { // ascii
       line_insert_brute_force(ts->buf->lines[ts->cy], ts->cx, key);
       ts->cx++;
+      ts->prefx = ts->cx;
       render_line(ts);
     }
     break;
