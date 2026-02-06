@@ -5,8 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_LINE_CAPACITY 1024
-
 typedef struct {
   char *data;
   size_t len;
@@ -43,8 +41,8 @@ void line_free(line_t *line) {
   free(line);
 }
 
-void line_insert_brute_force(line_t *line, int pos, char c) {
-  if (pos < 0 || pos > (int)line->len) {
+void line_insert_brute_force(line_t *line, size_t pos, char c) {
+  if (pos < 0 || pos > line->len) {
     return;
   }
   if (line->len + 1 >= line->cap) {
@@ -58,7 +56,7 @@ void line_insert_brute_force(line_t *line, int pos, char c) {
   }
   line->len++;
   char swap = c;
-  for (int i = pos; i < line->len; i++) {
+  for (size_t i = pos; i < line->len; i++) {
     char tmp = line->data[i];
     line->data[i] = swap;
     swap = tmp;
@@ -66,8 +64,8 @@ void line_insert_brute_force(line_t *line, int pos, char c) {
   line->data[line->len] = '\0';
 }
 
-void line_remove_char_at(line_t *line, int pos) {
-  if (pos < 0 || pos > (int)line->len) {
+void line_remove_char_at(line_t *line, size_t pos) {
+  if (pos < 0 || pos > line->len) {
     return;
   }
   if (line->len + 1 <= line->cap / 2) {
@@ -79,13 +77,13 @@ void line_remove_char_at(line_t *line, int pos) {
     line->data = d;
     line->cap = newcap;
   }
-  for (int i = pos + 1; i < line->len; i++) {
+  for (size_t i = pos + 1; i < line->len; i++) {
     line->data[i - 1] = line->data[i];
   }
   line->data[--line->len] = '\0';
 }
 
-line_t *line_split(line_t *line, int pos) {
+line_t *line_split(line_t *line, size_t pos) {
   if (pos < 0) {
     pos = 0;
   }
@@ -97,7 +95,7 @@ line_t *line_split(line_t *line, int pos) {
   if (lnew == NULL) {
     return NULL;
   }
-  for (int i = 0; i < n; i++) {
+  for (size_t i = 0; i < n; i++) {
     lnew->data[i] = line->data[pos + i];
     line->data[pos + i] = '\0';
   }
@@ -131,7 +129,7 @@ void buffer_free(buffer_t *buf) {
   if (buf == NULL) {
     return;
   }
-  for (int i = 0; i < buf->size; i++) {
+  for (size_t i = 0; i < buf->size; i++) {
     if (buf->lines[i] != NULL) {
       line_free(buf->lines[i]);
     }
@@ -167,7 +165,7 @@ buffer_t *buffer_from_file(FILE *file) {
   }
   ssize_t n;
   while ((n = getline(&line->data, &line->cap, file)) != -1) {
-    line->len = n;
+    line->len = (size_t)n;
     if (buffer_append_line(buf, line) != 0) {
       line_free(line);
       buffer_free(buf);
@@ -183,7 +181,7 @@ buffer_t *buffer_from_file(FILE *file) {
   return buf;
 }
 
-void buffer_insert_line(buffer_t *buf, line_t *line, int n) {
+void buffer_insert_line(buffer_t *buf, line_t *line, size_t n) {
   if (n < 0 || n > buf->size || buf == NULL || line == NULL) {
     return;
   }
@@ -197,7 +195,7 @@ void buffer_insert_line(buffer_t *buf, line_t *line, int n) {
     buf->lines = lines;
   }
   line_t *swap = line;
-  for (int i = n; i < buf->size + 1; i++) {
+  for (size_t i = n; i < buf->size + 1; i++) {
     line_t *tmp = buf->lines[i];
     buf->lines[i] = swap;
     swap = tmp;
@@ -216,13 +214,13 @@ void close_file(FILE *file) {
 void log_buffer(buffer_t *buf, FILE *file) {
   printf("buffer:\n");
   printf("===\n");
-  for (int i = 0; i < buf->size; i++) {
+  for (size_t i = 0; i < buf->size; i++) {
     printf("%s", buf->lines[i]->data);
   }
   printf("===\n");
 
   size_t total_cap = 0;
-  for (int i = 0; i < buf->size; i++) {
+  for (size_t i = 0; i < buf->size; i++) {
     total_cap += buf->lines[i]->len;
   }
   printf("estimated resources used: %zu bytes\n", total_cap);
@@ -230,7 +228,7 @@ void log_buffer(buffer_t *buf, FILE *file) {
   printf("original file size: %zu bytes; %zu lines\n", ftell(file), buf->size);
 }
 
-int clamp(int min, int max, int val) {
+size_t clamp(size_t min, size_t max, size_t val) {
   if (val <= min) {
     return min;
   }
@@ -246,18 +244,18 @@ enum mode_t {
 };
 
 typedef struct {
-  int cx;
-  int cy;
-  int maxx;
-  int maxy;
-  int topoff;
-  int prefx;
+  size_t cx;
+  size_t cy;
+  size_t maxx;
+  size_t maxy;
+  size_t topoff;
+  size_t prefx;
   mode_t mode;
   buffer_t *buf;
 } tui_state_t;
 
-int num_digits(int n) {
-  int d = 0;
+size_t num_digits(size_t n) {
+  size_t d = 0;
   do {
     n /= 10;
     d++;
@@ -276,14 +274,14 @@ void render_status_bar(tui_state_t *ts) {
     printw("-- NORMAL --");
     break;
   }
-  const int digits = num_digits(ts->cx) + num_digits(ts->cy);
+  const size_t digits = num_digits(ts->cx) + num_digits(ts->cy);
   const int left_offset = 12;
   const int right_offset = 6;
-  for (int i = left_offset; i < ts->maxx - digits - right_offset; i++) {
+  for (size_t i = left_offset; i < ts->maxx - digits - right_offset; i++) {
     printw(" ");
   }
   printw("%d, %d", ts->cy, ts->cx);
-  for (int i = ts->maxx; i > ts->maxx - digits - right_offset; i--) {
+  for (size_t i = ts->maxx; i > ts->maxx - digits - right_offset; i--) {
     printw(" ");
   }
   attroff(COLOR_PAIR(2));
@@ -302,15 +300,16 @@ void normal(tui_state_t *ts, int key) {
     break;
   case 'h':
   case KEY_LEFT:
-    ts->prefx--;
-    if (ts->prefx < 0)
-      ts->prefx = 0;
+    if (ts->prefx > 0) {
+      ts->prefx--;
+    }
     break;
   case 'l':
   case KEY_RIGHT:
     ts->prefx++;
-    if (ts->prefx >= ts->buf->lines[ts->cy]->len)
+    if (ts->prefx >= ts->buf->lines[ts->cy]->len) {
       ts->prefx = ts->buf->lines[ts->cy]->len - 1;
+    }
     break;
   case 'i':
     ts->mode = MODE_INSERT;
@@ -326,9 +325,9 @@ void normal(tui_state_t *ts, int key) {
 }
 
 void render_buffer(tui_state_t *ts) {
-  int max_rows = ts->buf->size > ts->maxy - 2 ? ts->maxy - 2 : ts->buf->size;
+  size_t max_rows = ts->buf->size > ts->maxy - 2 ? ts->maxy - 2 : ts->buf->size;
   move(0, 0);
-  for (int i = 0; i < max_rows; i++) {
+  for (size_t i = 0; i < max_rows; i++) {
     printw("%s", ts->buf->lines[i]->data);
   }
   move(ts->cy, ts->cx);
@@ -366,20 +365,20 @@ void insert(tui_state_t *ts, int key) {
     }
     render_buffer(ts);
     break;
-  case '\n':
-  case KEY_ENTER: {
-    line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx);
-    buffer_insert_line(ts->buf, lnew, ts->cy);
-    render_buffer(ts);
-    ts->cy++;
-    ts->cx = 0;
-    render_status_bar(ts);
-    move(ts->cy, ts->cx);
-    break;
-  }
+  // case '\n':
+  // case KEY_ENTER: {
+  //   line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx);
+  //   buffer_insert_line(ts->buf, lnew, ts->cy);
+  //   render_buffer(ts);
+  //   ts->cy++;
+  //   ts->cx = 0;
+  //   render_status_bar(ts);
+  //   move(ts->cy, ts->cx);
+  //   break;
+  // }
   default:
     if (0 < key && key < 255) { // ascii
-      line_insert_brute_force(ts->buf->lines[ts->cy], ts->cx, key);
+      line_insert_brute_force(ts->buf->lines[ts->cy], ts->cx, (char)key);
       ts->cx++;
       ts->prefx = ts->cx;
       render_line(ts);
@@ -388,7 +387,7 @@ void insert(tui_state_t *ts, int key) {
   }
 }
 
-void tui(buffer_t *buf, FILE *file) {
+void tui(buffer_t *buf) {
   initscr();
   start_color();
   init_pair(1, COLOR_WHITE, COLOR_BLACK);
@@ -445,7 +444,7 @@ int main(int argc, char *argv[]) {
   printf("before tui\n");
   log_buffer(buf, file);
 
-  tui(buf, file);
+  tui(buf);
 
   printf("after tui\n");
   log_buffer(buf, file);
