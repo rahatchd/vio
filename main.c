@@ -96,8 +96,8 @@ line_t *line_split(line_t *line, size_t pos) {
   if (line->len == 0) {
     pos = 0;
   }
-  if (line->len && pos > line->len - 1) {
-    pos = line->len - 1;
+  if (line->len && pos > line->len) {
+    pos = line->len;
   }
   size_t n = line->len - pos;
   line_t *lnew = line_new(n + 1);
