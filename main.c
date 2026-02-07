@@ -213,6 +213,18 @@ buffer_t *buffer_from_file(FILE *file) {
     }
   }
   line_free(line);
+  if (buf->size == 0) {
+    line = line_new(2);
+    if (line == NULL) {
+      buffer_free(buf);
+      return NULL;
+    }
+    if (buffer_append_line(buf, line) != 0) {
+      line_free(line);
+      buffer_free(buf);
+      return NULL;
+    }
+  }
   return buf;
 }
 
