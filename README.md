@@ -29,7 +29,8 @@ make
 - [x] remember column position
 - [x] status bar
 - [ ] scrolling
-- [ ] insert mode
+- [x] insert mode
+- [ ] write and exit commands (ie ':')
 - [ ] save file
 - [ ] word vim motions
 - [ ] number modifiers
