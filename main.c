@@ -14,10 +14,6 @@ void open_log_file(void) {
   }
 }
 
-void log_msg(char* msg) {
-  if (logfile) fprintf(logfile, "%s\n", msg);
-}
-
 typedef struct {
   char *data;
   size_t len;
@@ -117,6 +113,29 @@ line_t *line_split(line_t *line, size_t pos) {
   return lnew;
 }
 
+void line_merge(line_t *l1, line_t *l2) {
+  if (l1->cap < l1->len + l2->len) {
+    size_t cap = l1->len + l2->len ? 2 * (l1->len + l2->len) : 2;
+    char *d = realloc(l1->data, cap * sizeof(char));
+    if (d == NULL) {
+      return;
+    }
+    l1->data = d;
+    l1->cap = cap;
+  }
+  fprintf(logfile, "l1: %s len: %zu cap: %zu, l2: %s len: %zu, cap: %zu\n",
+          l1->data, l1->len, l1->cap, l2->data, l2->len, l2->cap);
+  for (size_t i = 0; i < l2->len; i++) {
+    fprintf(logfile, "i: %zu\n", i);
+    l1->data[l1->len + i] = l2->data[i];
+    l2->data[i] = '\0';
+  }
+  l1->len += l2->len;
+  l1->data[l1->len] = '\0';
+  fprintf(logfile, "l1: %s len: %zu cap: %zu, l2: %s len: %zu, cap: %zu\n",
+          l1->data, l1->len, l1->cap, l2->data, l2->len, l2->cap);
+}
+
 typedef struct {
   line_t **lines;
   size_t size;
@@ -198,7 +217,7 @@ buffer_t *buffer_from_file(FILE *file) {
 }
 
 void buffer_insert_line(buffer_t *buf, line_t *line, size_t n) {
-  if (n < 0 || n > buf->size || buf == NULL || line == NULL) {
+  if (n > buf->size || buf == NULL || line == NULL) {
     return;
   }
   if (buf->size + 1 >= buf->cap) {
@@ -217,6 +236,18 @@ void buffer_insert_line(buffer_t *buf, line_t *line, size_t n) {
     swap = tmp;
   }
   buf->size++;
+}
+
+void buffer_remove_line(buffer_t *buf, size_t n) {
+  fprintf(logfile, "brl n: %zu\n", n);
+  if (n == 0 || n > buf->size || buf == NULL)
+    return;
+  line_free(buf->lines[n]);
+  for (size_t i = n + 1; i < buf->size; i++) {
+    buf->lines[i - 1] = buf->lines[i];
+    fprintf(logfile, "brl i: %zu l: %s\n", i, buf->lines[i - 1]->data);
+  }
+  buf->size--;
 }
 
 void close_file(FILE *file) {
@@ -374,10 +405,18 @@ void insert(tui_state_t *ts, int key) {
   case KEY_BACKSPACE:
   case KEY_DC:
   case 127:
-    line_remove_char_at(ts->buf->lines[ts->cy], ts->cx - 1);
-    if (ts->cx > 0) {
-      ts->cx--;
-      ts->prefx = ts->cx;
+    if (ts->cx == 0) {
+      if (ts->cy == 0) {
+        break;
+      }
+      line_merge(ts->buf->lines[ts->cy - 1], ts->buf->lines[ts->cy]);
+      buffer_remove_line(ts->buf, ts->cy--);
+    } else {
+      line_remove_char_at(ts->buf->lines[ts->cy], ts->cx - 1);
+      if (ts->cx > 0) {
+        ts->cx--;
+        ts->prefx = ts->cx;
+      }
     }
     render_buffer(ts);
     break;
@@ -468,6 +507,7 @@ int main(int argc, char *argv[]) {
 
   buffer_free(buf);
   close_file(file);
-  if (logfile) close_file(logfile);
+  if (logfile)
+    close_file(logfile);
   exit(0);
 }
