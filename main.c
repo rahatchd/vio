@@ -51,7 +51,7 @@ void line_free(line_t *line) {
 }
 
 void line_insert_brute_force(line_t *line, size_t pos, char c) {
-  if (pos < 0 || pos > line->len) {
+  if (pos > line->len) {
     return;
   }
   if (line->len + 1 >= line->cap) {
@@ -74,7 +74,7 @@ void line_insert_brute_force(line_t *line, size_t pos, char c) {
 }
 
 void line_remove_char_at(line_t *line, size_t pos) {
-  if (pos < 0 || pos > line->len) {
+  if (pos > line->len) {
     return;
   }
   if (line->len + 1 <= line->cap / 2) {
@@ -93,7 +93,7 @@ void line_remove_char_at(line_t *line, size_t pos) {
 }
 
 line_t *line_split(line_t *line, size_t pos) {
-  if (pos < 0 || line->len == 0) {
+  if (line->len == 0) {
     pos = 0;
   }
   if (line->len && pos > line->len - 1) {
