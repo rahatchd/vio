@@ -123,17 +123,12 @@ void line_merge(line_t *l1, line_t *l2) {
     l1->data = d;
     l1->cap = cap;
   }
-  fprintf(logfile, "l1: %s len: %zu cap: %zu, l2: %s len: %zu, cap: %zu\n",
-          l1->data, l1->len, l1->cap, l2->data, l2->len, l2->cap);
   for (size_t i = 0; i < l2->len; i++) {
-    fprintf(logfile, "i: %zu\n", i);
     l1->data[l1->len + i] = l2->data[i];
     l2->data[i] = '\0';
   }
   l1->len += l2->len;
   l1->data[l1->len] = '\0';
-  fprintf(logfile, "l1: %s len: %zu cap: %zu, l2: %s len: %zu, cap: %zu\n",
-          l1->data, l1->len, l1->cap, l2->data, l2->len, l2->cap);
 }
 
 typedef struct {
@@ -251,13 +246,11 @@ void buffer_insert_line(buffer_t *buf, line_t *line, size_t n) {
 }
 
 void buffer_remove_line(buffer_t *buf, size_t n) {
-  fprintf(logfile, "brl n: %zu\n", n);
   if (n == 0 || n > buf->size || buf == NULL)
     return;
   line_free(buf->lines[n]);
   for (size_t i = n + 1; i < buf->size; i++) {
     buf->lines[i - 1] = buf->lines[i];
-    fprintf(logfile, "brl i: %zu l: %s\n", i, buf->lines[i - 1]->data);
   }
   buf->size--;
 }
