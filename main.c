@@ -5,6 +5,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+static FILE *logfile = NULL;
+
+void open_log_file(void) {
+  if ((logfile = fopen("log", "w")) == NULL) {
+    const int err = errno;
+    fprintf(stderr, "failed to open log file: %s\n", strerror(err));
+  }
+}
+
+void log_msg(char* msg) {
+  if (logfile) fprintf(logfile, "%s\n", msg);
+}
+
 typedef struct {
   char *data;
   size_t len;
@@ -19,7 +32,7 @@ line_t *line_new(size_t cap) {
   if (cap == 0) {
     line->data = NULL;
   } else {
-    line->data = calloc(cap * sizeof(char), '\0');
+    line->data = calloc(cap, sizeof(char));
     if (line->data == NULL) {
       free(line);
       return NULL;
@@ -84,14 +97,14 @@ void line_remove_char_at(line_t *line, size_t pos) {
 }
 
 line_t *line_split(line_t *line, size_t pos) {
-  if (pos < 0) {
+  if (pos < 0 || line->len == 0) {
     pos = 0;
   }
-  if (pos > line->len - 1) {
+  if (line->len && pos > line->len - 1) {
     pos = line->len - 1;
   }
-  size_t n = strlen(&line->data[pos]);
-  line_t *lnew = line_new(n);
+  size_t n = line->len - pos;
+  line_t *lnew = line_new(n + 1);
   if (lnew == NULL) {
     return NULL;
   }
@@ -99,7 +112,7 @@ line_t *line_split(line_t *line, size_t pos) {
     lnew->data[i] = line->data[pos + i];
     line->data[pos + i] = '\0';
   }
-  line->data[pos] = '\n';
+  lnew->len = line->len - pos;
   line->len = pos;
   return lnew;
 }
@@ -166,6 +179,9 @@ buffer_t *buffer_from_file(FILE *file) {
   ssize_t n;
   while ((n = getline(&line->data, &line->cap, file)) != -1) {
     line->len = (size_t)n;
+    if (line->len && line->data[line->len - 1] == '\n') {
+      line->data[--line->len] = '\0';
+    }
     if (buffer_append_line(buf, line) != 0) {
       line_free(line);
       buffer_free(buf);
@@ -195,7 +211,7 @@ void buffer_insert_line(buffer_t *buf, line_t *line, size_t n) {
     buf->lines = lines;
   }
   line_t *swap = line;
-  for (size_t i = n; i < buf->size + 1; i++) {
+  for (size_t i = n + 1; i < buf->size + 1; i++) {
     line_t *tmp = buf->lines[i];
     buf->lines[i] = swap;
     swap = tmp;
@@ -215,7 +231,7 @@ void log_buffer(buffer_t *buf, FILE *file) {
   printf("buffer:\n");
   printf("===\n");
   for (size_t i = 0; i < buf->size; i++) {
-    printf("%s", buf->lines[i]->data);
+    printf("%s\n", buf->lines[i]->data);
   }
   printf("===\n");
 
@@ -328,7 +344,7 @@ void render_buffer(tui_state_t *ts) {
   size_t max_rows = ts->buf->size > ts->maxy - 2 ? ts->maxy - 2 : ts->buf->size;
   move(0, 0);
   for (size_t i = 0; i < max_rows; i++) {
-    printw("%s", ts->buf->lines[i]->data);
+    printw("%s\n", ts->buf->lines[i]->data);
   }
   move(ts->cy, ts->cx);
   refresh();
@@ -365,17 +381,17 @@ void insert(tui_state_t *ts, int key) {
     }
     render_buffer(ts);
     break;
-  // case '\n':
-  // case KEY_ENTER: {
-  //   line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx);
-  //   buffer_insert_line(ts->buf, lnew, ts->cy);
-  //   render_buffer(ts);
-  //   ts->cy++;
-  //   ts->cx = 0;
-  //   render_status_bar(ts);
-  //   move(ts->cy, ts->cx);
-  //   break;
-  // }
+  case '\n':
+  case KEY_ENTER: {
+    line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx);
+    buffer_insert_line(ts->buf, lnew, ts->cy);
+    render_buffer(ts);
+    ts->cy++;
+    ts->cx = 0;
+    render_status_bar(ts);
+    move(ts->cy, ts->cx);
+    break;
+  }
   default:
     if (0 < key && key < 255) { // ascii
       line_insert_brute_force(ts->buf->lines[ts->cy], ts->cx, (char)key);
@@ -434,6 +450,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "failed to open file: %s\n", strerror(err));
     exit(err);
   }
+  open_log_file();
   buffer_t *buf = buffer_from_file(file);
   if (buf == NULL) {
     fprintf(stderr, "failed to load file into buffer");
@@ -451,5 +468,6 @@ int main(int argc, char *argv[]) {
 
   buffer_free(buf);
   close_file(file);
+  if (logfile) close_file(logfile);
   exit(0);
 }
