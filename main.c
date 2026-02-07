@@ -301,7 +301,7 @@ typedef struct {
   size_t maxx;
   size_t maxy;
   size_t topoff;
-  size_t prefx;
+  size_t stickyx;
   mode_t mode;
   buffer_t *buf;
 } tui_state_t;
@@ -352,15 +352,18 @@ void normal(tui_state_t *ts, int key) {
     break;
   case 'h':
   case KEY_LEFT:
-    if (ts->prefx > 0) {
-      ts->prefx--;
+    if (ts->stickyx > ts->buf->lines[ts->cy]->len) {
+      ts->stickyx = ts->buf->lines[ts->cy]->len - 1;
+    }
+    if (ts->stickyx > 0) {
+      ts->stickyx--;
     }
     break;
   case 'l':
   case KEY_RIGHT:
-    ts->prefx++;
-    if (ts->prefx >= ts->buf->lines[ts->cy]->len) {
-      ts->prefx = ts->buf->lines[ts->cy]->len - 1;
+    ts->stickyx++;
+    if (ts->stickyx >= ts->buf->lines[ts->cy]->len) {
+      ts->stickyx = ts->buf->lines[ts->cy]->len - 1;
     }
     break;
   case 'i':
@@ -372,7 +375,7 @@ void normal(tui_state_t *ts, int key) {
   ts->cy = clamp(0, ts->buf->size ? ts->buf->size - 1 : 0, ts->cy);
   ts->cx = clamp(
       0, ts->buf->lines[ts->cy]->len ? ts->buf->lines[ts->cy]->len - 1 : 0,
-      ts->prefx);
+      ts->stickyx);
   move(ts->cy, ts->cx);
 }
 
@@ -420,14 +423,14 @@ void insert(tui_state_t *ts, int key) {
       line_remove_char_at(ts->buf->lines[ts->cy], ts->cx - 1);
       if (ts->cx > 0) {
         ts->cx--;
-        ts->prefx = ts->cx;
+        ts->stickyx = ts->cx;
       }
     }
     render_buffer(ts);
     break;
   case '\n':
   case KEY_ENTER: {
-    line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx);
+    line_t *lnew = line_split(ts->buf->lines[ts->cy], ts->cx + 1);
     buffer_insert_line(ts->buf, lnew, ts->cy);
     render_buffer(ts);
     ts->cy++;
@@ -440,7 +443,7 @@ void insert(tui_state_t *ts, int key) {
     if (0 < key && key < 255) { // ascii
       line_insert_brute_force(ts->buf->lines[ts->cy], ts->cx, (char)key);
       ts->cx++;
-      ts->prefx = ts->cx;
+      ts->stickyx = ts->cx;
       render_line(ts);
     }
     break;
