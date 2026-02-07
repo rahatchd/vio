@@ -55,13 +55,13 @@ void line_insert_brute_force(line_t *line, size_t pos, char c) {
     return;
   }
   if (line->len + 1 >= line->cap) {
-    size_t newcap = 2 * line->cap;
-    char *d = realloc(line->data, newcap * sizeof(char));
+    size_t cap = line->cap ? 2 * line->cap : 2;
+    char *d = realloc(line->data, cap * sizeof(char));
     if (d == NULL) {
       return;
     }
     line->data = d;
-    line->cap = newcap;
+    line->cap = cap;
   }
   line->len++;
   char swap = c;
@@ -78,13 +78,13 @@ void line_remove_char_at(line_t *line, size_t pos) {
     return;
   }
   if (line->len + 1 <= line->cap / 2) {
-    size_t newcap = line->cap / 2;
-    char *d = realloc(line->data, newcap * sizeof(char));
+    size_t cap = line->cap ? line->cap / 2 : 2;
+    char *d = realloc(line->data, cap * sizeof(char));
     if (d == NULL) {
       return;
     }
     line->data = d;
-    line->cap = newcap;
+    line->cap = cap;
   }
   for (size_t i = pos + 1; i < line->len; i++) {
     line->data[i - 1] = line->data[i];
